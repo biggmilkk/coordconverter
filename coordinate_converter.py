@@ -2,6 +2,7 @@ import streamlit as st
 import math
 import pydeck as pdk
 import pandas as pd
+import re
 
 # --- Page Setup ---
 st.set_page_config(page_title="Coordinate Conversion Tool", layout="centered")
@@ -84,9 +85,23 @@ transform_map = {
     ("BD09", "WGS84"): bd09_to_wgs84
 }
 
-# --- Input Fields ---
-lat = st.number_input("Latitude", format="%.6f", placeholder="e.g. 39.90923")
-lon = st.number_input("Longitude", format="%.6f", placeholder="e.g. 116.39737")
+# --- Input Section ---
+coord_input = st.text_input(
+    "Enter Coordinates (latitude, longitude)",
+    placeholder="e.g. 19.227720395842656, -98.11928848510425"
+)
+
+lat, lon = None, None
+if coord_input.strip():
+    match = re.findall(r'-?\d+\.\d+', coord_input)
+    if len(match) >= 2:
+        try:
+            lat = float(match[0])
+            lon = float(match[1])
+        except:
+            st.error("Could not parse coordinates. Check format.")
+    else:
+        st.warning("Enter two numeric values separated by a comma or space.")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -94,8 +109,8 @@ with col1:
 with col2:
     to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
 
-# --- Conversion Execution ---
-if st.button("Convert Coordinates", use_container_width=True):
+# --- Conversion ---
+if lat is not None and lon is not None and st.button("Convert Coordinates", use_container_width=True):
     if from_sys == to_sys:
         st.info("No conversion necessary. The selected systems are the same.")
         st.write(f"Latitude: {lat:.6f}")
