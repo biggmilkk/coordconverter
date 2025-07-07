@@ -14,13 +14,16 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# --- Session State ---
 if "show_map" not in st.session_state:
     st.session_state["show_map"] = False
 
+# --- Constants ---
 PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
 
+# --- Coordinate Transformation Functions ---
 def out_of_china(lat, lon):
     return not (72.004 <= lon <= 137.8347 and 0.8293 <= lat <= 55.8271)
 
@@ -83,6 +86,7 @@ transform_map = {
     ("BD09", "WGS84"): bd09_to_wgs84
 }
 
+# --- Input Section ---
 coord_input = st.text_input("Enter Coordinates (latitude, longitude)", placeholder="e.g. 19.215401, -98.126154")
 lat, lon = None, None
 if coord_input.strip():
@@ -100,6 +104,7 @@ with col1:
 with col2:
     to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
 
+# --- Convert Button ---
 if st.button("Convert Coordinates", use_container_width=True):
     if lat is not None and lon is not None:
         st.session_state["show_map"] = True
@@ -109,6 +114,7 @@ if st.button("Convert Coordinates", use_container_width=True):
     else:
         st.warning("Please input valid coordinates before converting.")
 
+# --- Output Section ---
 if st.session_state.get("show_map"):
     lat, lon = st.session_state["input_coords"]
     from_sys = st.session_state["from_sys"]
@@ -135,22 +141,31 @@ if st.session_state.get("show_map"):
     bounds = [[min(lat, new_lat), min(lon, new_lon)], [max(lat, new_lat), max(lon, new_lon)]]
     m.fit_bounds(bounds, padding=(30, 30))
 
-    # Fixed-position legend inside map
+    # --- Refined Legend ---
     legend_html = """
     <div style="
         position: absolute;
-        bottom: 10px;
-        left: 10px;
+        bottom: 30px;
+        left: 30px;
         background-color: white;
-        border: 1px solid gray;
-        padding: 10px;
+        border: 1px solid #ccc;
+        padding: 10px 12px;
         font-size: 13px;
+        font-family: Arial, sans-serif;
+        color: #333;
         z-index: 9999;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+        border-radius: 4px;
     ">
-        <b>Legend</b><br>
-        <div style="color: blue;">● Input Coordinate</div>
-        <div style="color: green;">● Converted Coordinate</div>
+        <b style="font-size: 13px;">Legend</b><br>
+        <div style="margin-top: 6px;">
+            <span style="display:inline-block; width:10px; height:10px; background:#1f77b4; border-radius:50%; margin-right:8px;"></span>
+            Input Coordinate
+        </div>
+        <div style="margin-top: 4px;">
+            <span style="display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;"></span>
+            Converted Coordinate
+        </div>
     </div>
     """
     m.get_root().html.add_child(Element(legend_html))
