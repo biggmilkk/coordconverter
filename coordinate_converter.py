@@ -5,7 +5,7 @@ import folium
 from streamlit_folium import st_folium
 import re
 
-# --- Page Setup ---
+# --- Setup ---
 st.set_page_config(page_title="Coordinate Conversion Tool", layout="centered")
 
 st.markdown("<h2 style='text-align: center;'>Coordinate Conversion Tool</h2>", unsafe_allow_html=True)
@@ -14,11 +14,16 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Conversion Constants ---
+# --- Initialize state ---
+if "show_map" not in st.session_state:
+    st.session_state["show_map"] = False
+
+# --- Coordinate transformation constants ---
 PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
 
+# --- Conversion functions ---
 def out_of_china(lat, lon):
     return not (72.004 <= lon <= 137.8347 and 0.8293 <= lat <= 55.8271)
 
@@ -110,35 +115,40 @@ with col1:
 with col2:
     to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
 
-# --- Conversion ---
-if lat is not None and lon is not None and st.button("Convert Coordinates", use_container_width=True):
+# --- Button Logic ---
+if lat is not None and lon is not None:
+    if st.button("Convert Coordinates", use_container_width=True):
+        st.session_state["show_map"] = True
+        st.session_state["input_coords"] = (lat, lon)
+        st.session_state["from_sys"] = from_sys
+        st.session_state["to_sys"] = to_sys
+
+# --- Map Output ---
+if st.session_state.get("show_map"):
+    lat, lon = st.session_state["input_coords"]
+    from_sys = st.session_state["from_sys"]
+    to_sys = st.session_state["to_sys"]
+
+    func = transform_map.get((from_sys, to_sys))
     if from_sys == to_sys:
-        st.info("No conversion necessary. The selected systems are the same.")
-        st.write(f"Latitude: {lat:.6f}")
-        st.write(f"Longitude: {lon:.6f}")
+        new_lat, new_lon = lat, lon
+    elif func:
+        new_lat, new_lon = func(lat, lon)
     else:
-        func = transform_map.get((from_sys, to_sys))
-        if func:
-            try:
-                new_lat, new_lon = func(lat, lon)
+        st.error("Unsupported conversion.")
+        st.stop()
 
-                st.subheader("Converted Coordinates")
-                st.write(f"Latitude: `{new_lat:.6f}`")
-                st.write(f"Longitude: `{new_lon:.6f}`")
+    st.subheader("Converted Coordinates")
+    st.write(f"Latitude: `{new_lat:.6f}`")
+    st.write(f"Longitude: `{new_lon:.6f}`")
 
-                # --- Folium Map ---
-                st.markdown("<h4 style='text-align: center;'>Map Preview</h4>", unsafe_allow_html=True)
-                m = folium.Map(location=[(lat + new_lat) / 2, (lon + new_lon) / 2], zoom_start=12, tiles="CartoDB positron")
+    # Render folium map
+    st.markdown("<h4 style='text-align: center;'>Map Preview</h4>", unsafe_allow_html=True)
+    m = folium.Map(location=[(lat + new_lat) / 2, (lon + new_lon) / 2], zoom_start=12, tiles="CartoDB positron")
 
-                folium.Marker([lat, lon], tooltip="Input", icon=folium.Icon(color="blue")).add_to(m)
-                folium.Marker([new_lat, new_lon], tooltip="Converted", icon=folium.Icon(color="green")).add_to(m)
+    folium.Marker([lat, lon], tooltip="Input", icon=folium.Icon(color="blue")).add_to(m)
+    folium.Marker([new_lat, new_lon], tooltip="Converted", icon=folium.Icon(color="green")).add_to(m)
+    bounds = [[min(lat, new_lat), min(lon, new_lon)], [max(lat, new_lat), max(lon, new_lon)]]
+    m.fit_bounds(bounds, padding=(30, 30))
 
-                bounds = [[min(lat, new_lat), min(lon, new_lon)], [max(lat, new_lat), max(lon, new_lon)]]
-                m.fit_bounds(bounds, padding=(30, 30))
-
-                st_folium(m, width=700, height=450)
-
-            except Exception as e:
-                st.error(f"An error occurred during conversion: {e}")
-        else:
-            st.error("This conversion path is not currently supported.")
+    st_folium(m, width=700, height=450)
