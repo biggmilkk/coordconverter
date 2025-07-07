@@ -1,7 +1,8 @@
 import streamlit as st
 import math
-import pydeck as pdk
 import pandas as pd
+import folium
+from streamlit_folium import st_folium
 import re
 
 # --- Page Setup ---
@@ -13,7 +14,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Conversion Logic ---
+# --- Conversion Constants ---
 PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
@@ -88,7 +89,7 @@ transform_map = {
 # --- Input Section ---
 coord_input = st.text_input(
     "Enter Coordinates (latitude, longitude)",
-    placeholder="e.g. 19.227720395842656, -98.11928848510425"
+    placeholder="e.g. 19.21540142747638, -98.12615494009624"
 )
 
 lat, lon = None, None
@@ -120,48 +121,22 @@ if lat is not None and lon is not None and st.button("Convert Coordinates", use_
         if func:
             try:
                 new_lat, new_lon = func(lat, lon)
+
                 st.subheader("Converted Coordinates")
                 st.write(f"Latitude: `{new_lat:.6f}`")
                 st.write(f"Longitude: `{new_lon:.6f}`")
 
-                # --- Map Preview ---
-                df = pd.DataFrame([
-                    {"Label": "Input", "lat": lat, "lon": lon},
-                    {"Label": "Converted", "lat": new_lat, "lon": new_lon}
-                ])
-                center_lat = (lat + new_lat) / 2
-                center_lon = (lon + new_lon) / 2
-
+                # --- Folium Map ---
                 st.markdown("<h4 style='text-align: center;'>Map Preview</h4>", unsafe_allow_html=True)
-                st.pydeck_chart(pdk.Deck(
-                    map_style="mapbox://styles/mapbox/streets-v12",
-                    initial_view_state=pdk.ViewState(
-                        latitude=center_lat,
-                        longitude=center_lon,
-                        zoom=12,
-                        pitch=0,
-                    ),
-                    layers=[
-                        pdk.Layer(
-                            "ScatterplotLayer",
-                            data=df,
-                            get_position='[lon, lat]',
-                            get_fill_color='[0, 100, 200, 160]',
-                            get_radius=100,
-                            pickable=True,
-                        ),
-                        pdk.Layer(
-                            "TextLayer",
-                            data=df,
-                            get_position='[lon, lat]',
-                            get_text='Label',
-                            get_size=16,
-                            get_color='[0, 0, 0, 255]',
-                            get_text_anchor='"top"',
-                            get_alignment_baseline='"bottom"'
-                        )
-                    ]
-                ))
+                m = folium.Map(location=[(lat + new_lat) / 2, (lon + new_lon) / 2], zoom_start=12, tiles="CartoDB positron")
+
+                folium.Marker([lat, lon], tooltip="Input", icon=folium.Icon(color="blue")).add_to(m)
+                folium.Marker([new_lat, new_lon], tooltip="Converted", icon=folium.Icon(color="green")).add_to(m)
+
+                bounds = [[min(lat, new_lat), min(lon, new_lon)], [max(lat, new_lat), max(lon, new_lon)]]
+                m.fit_bounds(bounds, padding=(30, 30))
+
+                st_folium(m, width=700, height=450)
 
             except Exception as e:
                 st.error(f"An error occurred during conversion: {e}")
