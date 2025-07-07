@@ -170,4 +170,5 @@ if st.session_state.get("show_map"):
     """
     m.get_root().html.add_child(Element(legend_html))
 
+    _ = m._repr_html_()  # ✅ Force map refresh to fix layout spacing
     st_folium(m, width=700, height=500)
