@@ -141,10 +141,11 @@ if st.session_state.get("show_map"):
     bounds = [[min(lat, new_lat), min(lon, new_lon)], [max(lat, new_lat), max(lon, new_lon)]]
     m.fit_bounds(bounds, padding=(30, 30))
 
+    # --- Legend inside map ---
     legend_html = """
     <div style="
-        position: fixed; 
-        bottom: 50px; left: 50px; width: 170px; height: auto; 
+        position: absolute; 
+        bottom: 10px; left: 10px; width: 170px; height: auto; 
         background-color: white;
         border: 1px solid lightgray;
         padding: 10px;
