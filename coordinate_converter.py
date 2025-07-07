@@ -3,7 +3,7 @@ import math
 import folium
 from streamlit_folium import st_folium
 import re
-from branca.element import Template, MacroElement
+from folium import Element
 
 # --- Page Setup ---
 st.set_page_config(page_title="Spatial Coordinate Converter", layout="centered")
@@ -144,19 +144,17 @@ if st.session_state.get("show_map"):
     legend_html = """
     <div style="
         position: fixed; 
-        bottom: 50px; left: 50px; width: 150px; height: 60px; 
-        background-color: white; 
+        bottom: 50px; left: 50px; width: 170px; height: auto; 
+        background-color: white;
         border: 1px solid lightgray;
-        z-index:9999; 
-        font-size:12px;
-        padding: 10px;">
+        padding: 10px;
+        font-size: 13px;
+        z-index:9999;">
         <b>Legend</b><br>
-        <i style="color:blue;">●</i> Input<br>
-        <i style="color:green;">●</i> Converted
+        <span style='color:blue;'>●</span> Input Coordinate<br>
+        <span style='color:green;'>●</span> Converted Coordinate
     </div>
     """
-    legend = MacroElement()
-    legend._template = Template(legend_html)
-    m.get_root().add_child(legend)
+    m.get_root().html.add_child(Element(legend_html))
 
-    st_folium(m, width=700, height=450)
+    st_folium(m, width=700, height=500)
