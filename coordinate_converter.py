@@ -7,19 +7,19 @@ import re
 from branca.element import Template, MacroElement
 
 # --- Page Setup ---
-st.set_page_config(page_title="Coordinate Conversion Tool", layout="centered")
+st.set_page_config(page_title="Spatial Coordinate Converter", layout="centered")
 
-st.markdown("<h2 style='text-align: center;'>Coordinate Conversion Tool</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>Spatial Coordinate Converter</h2>", unsafe_allow_html=True)
 st.markdown(
-    "<p style='text-align: center; font-size: 0.9rem; color: grey;'>Convert geographic coordinates between WGS84, GCJ-02, and BD09 systems for use in mapping and spatial analysis workflows. Outputs are copy-friendly and visualized clearly.</p>",
+    "<p style='text-align: center; font-size: 0.9rem; color: grey;'>Transform geographic coordinates between WGS84, GCJ-02, and BD09 reference systems for geospatial analysis and interoperability.</p>",
     unsafe_allow_html=True
 )
 
-# --- Initialize state ---
+# --- Initialize session state ---
 if "show_map" not in st.session_state:
     st.session_state["show_map"] = False
 
-# --- Conversion logic ---
+# --- Constants and transformation functions ---
 PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
@@ -28,7 +28,8 @@ def out_of_china(lat, lon):
     return not (72.004 <= lon <= 137.8347 and 0.8293 <= lat <= 55.8271)
 
 def transform_lat(x, y):
-    ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.sqrt(abs(x))
+    ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + \
+          0.1 * x * y + 0.2 * math.sqrt(abs(x))
     ret += (20 * math.sin(6 * x * PI) + 20 * math.sin(2 * x * PI)) * 2 / 3
     ret += (20 * math.sin(y * PI) + 40 * math.sin(y / 3 * PI)) * 2 / 3
     ret += (160 * math.sin(y / 12 * PI) + 320 * math.sin(y * PI / 30)) * 2 / 3
@@ -85,7 +86,7 @@ transform_map = {
     ("BD09", "WGS84"): bd09_to_wgs84
 }
 
-# --- Input ---
+# --- Coordinate Input ---
 coord_input = st.text_input("Enter Coordinates (latitude, longitude)", placeholder="e.g. 19.215401, -98.126154")
 lat, lon = None, None
 if coord_input.strip():
@@ -105,7 +106,7 @@ with col1:
 with col2:
     to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
 
-# --- Button and State ---
+# --- Trigger Conversion ---
 if lat is not None and lon is not None:
     if st.button("Convert Coordinates", use_container_width=True):
         st.session_state["show_map"] = True
@@ -113,7 +114,7 @@ if lat is not None and lon is not None:
         st.session_state["from_sys"] = from_sys
         st.session_state["to_sys"] = to_sys
 
-# --- Output ---
+# --- Output and Visualization ---
 if st.session_state.get("show_map"):
     lat, lon = st.session_state["input_coords"]
     from_sys = st.session_state["from_sys"]
@@ -128,16 +129,15 @@ if st.session_state.get("show_map"):
         st.error("Unsupported conversion path.")
         st.stop()
 
-    st.subheader("Converted Coordinates (Copy-Friendly)")
+    st.subheader("Converted Coordinate Values")
     coord_str = f"{new_lat:.6f}, {new_lon:.6f}"
     st.code(coord_str)
 
-    # --- Map Output with Legend ---
-    st.markdown("<h4 style='text-align: center;'>Map Preview</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center;'>Coordinate Visualization</h4>", unsafe_allow_html=True)
     m = folium.Map(location=[(lat + new_lat) / 2, (lon + new_lon) / 2], zoom_start=12, tiles="CartoDB positron")
+
     folium.Marker([lat, lon], tooltip="Input", icon=folium.Icon(color="blue")).add_to(m)
     folium.Marker([new_lat, new_lon], tooltip="Converted", icon=folium.Icon(color="green")).add_to(m)
-
     bounds = [[min(lat, new_lat), min(lon, new_lon)], [max(lat, new_lat), max(lon, new_lon)]]
     m.fit_bounds(bounds, padding=(30, 30))
 
