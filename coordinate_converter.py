@@ -1,6 +1,5 @@
 import streamlit as st
 import math
-import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import re
@@ -15,15 +14,16 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Initialize session state ---
+# --- Session State ---
 if "show_map" not in st.session_state:
     st.session_state["show_map"] = False
 
-# --- Constants and transformation functions ---
+# --- Constants ---
 PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
 
+# --- Coordinate Transformation Functions ---
 def out_of_china(lat, lon):
     return not (72.004 <= lon <= 137.8347 and 0.8293 <= lat <= 55.8271)
 
@@ -86,7 +86,7 @@ transform_map = {
     ("BD09", "WGS84"): bd09_to_wgs84
 }
 
-# --- Coordinate Input ---
+# --- Input Section ---
 coord_input = st.text_input("Enter Coordinates (latitude, longitude)", placeholder="e.g. 19.215401, -98.126154")
 lat, lon = None, None
 if coord_input.strip():
@@ -96,9 +96,7 @@ if coord_input.strip():
             lat = float(match[0])
             lon = float(match[1])
         except:
-            st.error("Could not parse coordinates. Check format.")
-    else:
-        st.warning("Enter two decimal values separated by a comma or space.")
+            lat, lon = None, None
 
 col1, col2 = st.columns(2)
 with col1:
@@ -106,15 +104,17 @@ with col1:
 with col2:
     to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
 
-# --- Trigger Conversion ---
-if lat is not None and lon is not None:
-    if st.button("Convert Coordinates", use_container_width=True):
+# --- Conversion Button ---
+if st.button("Convert Coordinates", use_container_width=True):
+    if lat is not None and lon is not None:
         st.session_state["show_map"] = True
         st.session_state["input_coords"] = (lat, lon)
         st.session_state["from_sys"] = from_sys
         st.session_state["to_sys"] = to_sys
+    else:
+        st.warning("Please input valid coordinates before converting.")
 
-# --- Output and Visualization ---
+# --- Output ---
 if st.session_state.get("show_map"):
     lat, lon = st.session_state["input_coords"]
     from_sys = st.session_state["from_sys"]
