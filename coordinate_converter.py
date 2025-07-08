@@ -136,12 +136,15 @@ with col2:
     to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
 
 # --- Convert ---
+if "converted_coords" not in st.session_state:
+    st.session_state.converted_coords = []
+
 if st.button("Convert Coordinates", use_container_width=True):
     parsed_coords = parse_input_coordinates(input_text)
     if not parsed_coords:
         st.warning("No valid coordinates found.")
+        st.session_state.converted_coords = []
     else:
-        st.subheader("Converted Coordinates")
         converted = []
         for lat, lon in parsed_coords:
             if from_sys == to_sys:
@@ -150,38 +153,42 @@ if st.button("Convert Coordinates", use_container_width=True):
                 func = transform_map.get((from_sys, to_sys))
                 new_lat, new_lon = func(lat, lon)
             converted.append((lat, lon, new_lat, new_lon))
+        st.session_state.converted_coords = converted
 
-        for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
-            st.text(f"Point {i} → {nlat:.6f}, {nlon:.6f}")
+if st.session_state.converted_coords:
+    st.subheader("Converted Coordinates")
+    converted = st.session_state.converted_coords
+    for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
+        st.text(f"Point {i} → {nlat:.6f}, {nlon:.6f}")
 
-        m = folium.Map(location=[converted[0][0], converted[0][1]], zoom_start=6)
-        for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
-            folium.Marker([olat, olon], tooltip=f"Input {i}", icon=folium.Icon(color="blue")).add_to(m)
-            folium.Marker([nlat, nlon], tooltip=f"Converted {i}", icon=folium.Icon(color="green")).add_to(m)
+    m = folium.Map(location=[converted[0][0], converted[0][1]], zoom_start=6)
+    for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
+        folium.Marker([olat, olon], tooltip=f"Input {i}", icon=folium.Icon(color="blue")).add_to(m)
+        folium.Marker([nlat, nlon], tooltip=f"Converted {i}", icon=folium.Icon(color="green")).add_to(m)
 
-        bounds = [[min(min(c[0], c[2]) for c in converted), min(min(c[1], c[3]) for c in converted)],
-                  [max(max(c[0], c[2]) for c in converted), max(max(c[1], c[3]) for c in converted)]]
-        m.fit_bounds(bounds, padding=(20, 20))
+    bounds = [[min(min(c[0], c[2]) for c in converted), min(min(c[1], c[3]) for c in converted)],
+              [max(max(c[0], c[2]) for c in converted), max(max(c[1], c[3]) for c in converted)]]
+    m.fit_bounds(bounds, padding=(20, 20))
 
-        legend_html = """
-        <div style="
-            position: absolute;
-            bottom: 30px;
-            left: 30px;
-            background-color: white;
-            border: 1px solid #ccc;
-            padding: 10px 12px;
-            font-size: 13px;
-            font-family: Arial, sans-serif;
-            color: #333;
-            z-index: 9999;
-            box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
-            border-radius: 4px;">
-            <b>Legend</b><br>
-            <span style='display:inline-block; width:10px; height:10px; background:#1f77b4; border-radius:50%; margin-right:8px;'></span> Input<br>
-            <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
-        </div>
-        """
-        m.get_root().html.add_child(Element(legend_html))
-        with st.container():
-            st_folium(m, width=700, height=500)
+    legend_html = """
+    <div style="
+        position: absolute;
+        bottom: 30px;
+        left: 30px;
+        background-color: white;
+        border: 1px solid #ccc;
+        padding: 10px 12px;
+        font-size: 13px;
+        font-family: Arial, sans-serif;
+        color: #333;
+        z-index: 9999;
+        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+        border-radius: 4px;">
+        <b>Legend</b><br>
+        <span style='display:inline-block; width:10px; height:10px; background:#1f77b4; border-radius:50%; margin-right:8px;'></span> Input<br>
+        <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
+    </div>
+    """
+    m.get_root().html.add_child(Element(legend_html))
+    with st.container():
+        st_folium(m, width=700, height=500)
