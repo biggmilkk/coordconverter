@@ -1,29 +1,23 @@
 import streamlit as st
 import math
 import folium
-from streamlit_folium import st_folium
 import re
+from streamlit_folium import st_folium
 from folium import Element
 
-# --- Page Setup ---
 st.set_page_config(page_title="Spatial Coordinate Converter", layout="centered")
 
 st.markdown("<h2 style='text-align: center;'>Spatial Coordinate Converter</h2>", unsafe_allow_html=True)
-st.markdown(
-    "<p style='text-align: center; font-size: 0.9rem; color: grey;'>Transform geographic coordinates between WGS84, GCJ-02, and BD09 reference systems for geospatial analysis and interoperability.</p>",
-    unsafe_allow_html=True
-)
+st.markdown("""
+<p style='text-align: center; font-size: 0.9rem; color: grey;'>
+Convert single or multiple geographic coordinates between WGS84, GCJ-02, and BD09.
+</p>
+""", unsafe_allow_html=True)
 
-# --- Session State ---
-if "show_map" not in st.session_state:
-    st.session_state["show_map"] = False
-
-# --- Constants ---
 PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
 
-# --- Coordinate Transformation Functions ---
 def out_of_china(lat, lon):
     return not (72.004 <= lon <= 137.8347 and 0.8293 <= lat <= 55.8271)
 
@@ -86,17 +80,39 @@ transform_map = {
     ("BD09", "WGS84"): bd09_to_wgs84
 }
 
+# --- Coordinate Parsing ---
+def dms_to_dd(d, m, s, direction):
+    dd = d + m / 60 + s / 3600
+    if direction in ['S', 'W']:
+        dd *= -1
+    return dd
+
+def parse_input_coordinates(text):
+    lines = text.strip().splitlines()
+    coords = []
+    for line in lines:
+        nums = re.findall(r"-?\d+\.?\d*", line)
+        if len(nums) >= 2:
+            try:
+                lat, lon = float(nums[0]), float(nums[1])
+                coords.append((lat, lon))
+            except:
+                continue
+        else:
+            dms = re.findall(r"(\d+)[^\d]+(\d+)[^\d]+(\d+)[^\d]*([NSEW])", line.upper())
+            if len(dms) >= 2:
+                try:
+                    d1, m1, s1, dir1 = dms[0]
+                    d2, m2, s2, dir2 = dms[1]
+                    lat = dms_to_dd(int(d1), int(m1), int(s1), dir1)
+                    lon = dms_to_dd(int(d2), int(m2), int(s2), dir2)
+                    coords.append((lat, lon))
+                except:
+                    continue
+    return coords
+
 # --- Input Section ---
-coord_input = st.text_input("Enter Coordinates (latitude, longitude)", placeholder="e.g. 19.215401, -98.126154")
-lat, lon = None, None
-if coord_input.strip():
-    match = re.findall(r'-?\d+\.\d+', coord_input)
-    if len(match) >= 2:
-        try:
-            lat = float(match[0])
-            lon = float(match[1])
-        except:
-            lat, lon = None, None
+input_text = st.text_area("Paste Coordinates (DD or DMS)", height=150, placeholder="19.215401, -98.126154\n19°12'55\"N 98°07'34\"W")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -104,74 +120,54 @@ with col1:
 with col2:
     to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
 
-# --- Convert Button ---
+# --- Convert ---
 if st.button("Convert Coordinates", use_container_width=True):
-    if lat is not None and lon is not None:
-        st.session_state["show_map"] = True
-        st.session_state["input_coords"] = (lat, lon)
-        st.session_state["from_sys"] = from_sys
-        st.session_state["to_sys"] = to_sys
+    parsed_coords = parse_input_coordinates(input_text)
+    if not parsed_coords:
+        st.warning("No valid coordinates found.")
     else:
-        st.warning("Please input valid coordinates before converting.")
+        st.subheader("Converted Coordinates")
+        converted = []
+        for lat, lon in parsed_coords:
+            if from_sys == to_sys:
+                new_lat, new_lon = lat, lon
+            else:
+                func = transform_map.get((from_sys, to_sys))
+                new_lat, new_lon = func(lat, lon)
+            converted.append((lat, lon, new_lat, new_lon))
 
-# --- Output Section ---
-if st.session_state.get("show_map"):
-    lat, lon = st.session_state["input_coords"]
-    from_sys = st.session_state["from_sys"]
-    to_sys = st.session_state["to_sys"]
+        for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
+            st.text(f"Point {i} → {nlat:.6f}, {nlon:.6f}")
 
-    func = transform_map.get((from_sys, to_sys))
-    if from_sys == to_sys:
-        new_lat, new_lon = lat, lon
-    elif func:
-        new_lat, new_lon = func(lat, lon)
-    else:
-        st.error("Unsupported conversion path.")
-        st.stop()
+        m = folium.Map(location=[converted[0][0], converted[0][1]], zoom_start=6)
+        for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
+            folium.Marker([olat, olon], tooltip=f"Input {i}", icon=folium.Icon(color="blue")).add_to(m)
+            folium.Marker([nlat, nlon], tooltip=f"Converted {i}", icon=folium.Icon(color="green")).add_to(m)
 
-    st.subheader("Converted Coordinate Values")
-    coord_str = f"{new_lat:.6f}, {new_lon:.6f}"
-    st.code(coord_str)
+        bounds = [[min(min(c[0], c[2]) for c in converted), min(min(c[1], c[3]) for c in converted)],
+                  [max(max(c[0], c[2]) for c in converted), max(max(c[1], c[3]) for c in converted)]]
+        m.fit_bounds(bounds, padding=(20, 20))
 
-    st.markdown("<h4 style='text-align: center;'>Coordinate Visualization</h4>", unsafe_allow_html=True)
-    m = folium.Map(location=[(lat + new_lat) / 2, (lon + new_lon) / 2], zoom_start=12, tiles="CartoDB positron")
-
-    folium.Marker([lat, lon], tooltip="Input Coordinate", icon=folium.Icon(color="blue")).add_to(m)
-    folium.Marker([new_lat, new_lon], tooltip="Converted Coordinate", icon=folium.Icon(color="green")).add_to(m)
-    bounds = [[min(lat, new_lat), min(lon, new_lon)], [max(lat, new_lat), max(lon, new_lon)]]
-    m.fit_bounds(bounds, padding=(30, 30))
-
-    # --- Refined Legend ---
-    legend_html = """
-    <div style="
-        position: absolute;
-        bottom: 30px;
-        left: 30px;
-        background-color: white;
-        border: 1px solid #ccc;
-        padding: 10px 12px;
-        font-size: 13px;
-        font-family: Arial, sans-serif;
-        color: #333;
-        z-index: 9999;
-        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
-        border-radius: 4px;
-    ">
-        <b style="font-size: 13px;">Legend</b><br>
-        <div style="margin-top: 6px;">
-            <span style="display:inline-block; width:10px; height:10px; background:#1f77b4; border-radius:50%; margin-right:8px;"></span>
-            Input Coordinate
+        legend_html = """
+        <div style="
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-family: Arial, sans-serif;
+            color: #333;
+            z-index: 9999;
+            box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+            border-radius: 4px;">
+            <b>Legend</b><br>
+            <span style='display:inline-block; width:10px; height:10px; background:#1f77b4; border-radius:50%; margin-right:8px;'></span> Input<br>
+            <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
         </div>
-        <div style="margin-top: 4px;">
-            <span style="display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;"></span>
-            Converted Coordinate
-        </div>
-    </div>
-    """
-    m.get_root().html.add_child(Element(legend_html))
-
-    # ✅ Refresh map inside a container to fix layout issues
-    map_container = st.container()
-    with map_container:
-        _ = m._repr_html_()  # Trigger layout recalculation
-        st_folium(m, width=700, height=500)
+        """
+        m.get_root().html.add_child(Element(legend_html))
+        _ = m._repr_html_()
+        with st.container():
+            st_folium(m, width=700, height=500)
