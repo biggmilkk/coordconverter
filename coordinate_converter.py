@@ -87,32 +87,47 @@ def dms_to_dd(d, m, s, direction):
         dd *= -1
     return dd
 
+def dm_to_dd(dm, direction):
+    d = int(dm)
+    m = (dm - d) * 100
+    dd = d + m / 60
+    if direction in ['S', 'W']:
+        dd *= -1
+    return dd
+
 def parse_input_coordinates(text):
+    text = text.replace("\u00b0", " ").replace("\u2032", " ").replace("\u2033", " ")
+    text = text.replace(",", " ").replace(";", " ")
     lines = text.strip().splitlines()
     coords = []
-    for line in lines:
-        nums = re.findall(r"-?\d+\.?\d*", line)
-        if len(nums) >= 2:
-            try:
-                lat, lon = float(nums[0]), float(nums[1])
+    tokens = re.findall(r'[\d.]+|[NSEW]', text.upper())
+
+    i = 0
+    while i < len(tokens):
+        try:
+            if (i + 7 < len(tokens) and tokens[i+3] in 'NS' and tokens[i+7] in 'EW'):
+                lat = dms_to_dd(int(tokens[i]), int(tokens[i+1]), float(tokens[i+2]), tokens[i+3])
+                lon = dms_to_dd(int(tokens[i+4]), int(tokens[i+5]), float(tokens[i+6]), tokens[i+7])
                 coords.append((lat, lon))
-            except:
-                continue
-        else:
-            dms = re.findall(r"(\d+)[^\d]+(\d+)[^\d]+(\d+)[^\d]*([NSEW])", line.upper())
-            if len(dms) >= 2:
-                try:
-                    d1, m1, s1, dir1 = dms[0]
-                    d2, m2, s2, dir2 = dms[1]
-                    lat = dms_to_dd(int(d1), int(m1), int(s1), dir1)
-                    lon = dms_to_dd(int(d2), int(m2), int(s2), dir2)
-                    coords.append((lat, lon))
-                except:
-                    continue
+                i += 8
+            elif (i + 3 < len(tokens) and tokens[i+1] in 'NS' and tokens[i+3] in 'EW'):
+                lat = dm_to_dd(float(tokens[i]), tokens[i+1])
+                lon = dm_to_dd(float(tokens[i+2]), tokens[i+3])
+                coords.append((lat, lon))
+                i += 4
+            elif (i + 1 < len(tokens)):
+                lat = float(tokens[i])
+                lon = float(tokens[i+1])
+                coords.append((lat, lon))
+                i += 2
+            else:
+                i += 1
+        except:
+            i += 1
     return coords
 
 # --- Input Section ---
-input_text = st.text_area("Paste Coordinates (DD or DMS)", height=150, placeholder="19.215401, -98.126154\n19°12'55\"N 98°07'34\"W")
+input_text = st.text_area("Paste Coordinates (DD, DMS, or DDM)", height=150, placeholder="19.215401, -98.126154\n19 12 55N, 98 07 34W\n19.2154N 98.1261W")
 
 col1, col2 = st.columns(2)
 with col1:
