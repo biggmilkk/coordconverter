@@ -183,6 +183,5 @@ if st.button("Convert Coordinates", use_container_width=True):
         </div>
         """
         m.get_root().html.add_child(Element(legend_html))
-        _ = m._repr_html_()
         with st.container():
             st_folium(m, width=700, height=500)
