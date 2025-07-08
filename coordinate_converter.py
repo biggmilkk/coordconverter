@@ -5,9 +5,9 @@ import re
 from streamlit_folium import st_folium
 from folium import Element
 
-st.set_page_config(page_title="Spatial Coordinate Converter", layout="centered")
+st.set_page_config(page_title="Coordinate Reference System Converter", layout="centered")
 
-st.markdown("<h2 style='text-align: center;'>Spatial Coordinate Converter</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>Coordinate Reference System Converter</h2>", unsafe_allow_html=True)
 st.markdown("""
 <p style='text-align: center; font-size: 0.9rem; color: grey;'>
 Convert single or multiple geographic coordinates between WGS84, GCJ-02, and BD09.
