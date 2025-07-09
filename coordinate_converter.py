@@ -133,6 +133,14 @@ if mode == "Point Conversion":
 
         convert_btn = st.form_submit_button("Convert Coordinates")
 
+        st.markdown("""
+            <style>
+            div.stButton > button {
+                width: 100% !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
     if convert_btn:
         if coord_input:
             try:
