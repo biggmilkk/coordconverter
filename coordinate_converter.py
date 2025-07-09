@@ -9,7 +9,7 @@ from streamlit_folium import st_folium
 from folium import Element
 from xml.etree import ElementTree as ET
 
-st.set_page_config(page_title="Test Coordinate Reference System Converter", layout="centered")
+st.set_page_config(page_title="Coordinate Reference System Converter", layout="centered")
 
 st.markdown("<h2 style='text-align: center;'>Coordinate Reference System Converter</h2>", unsafe_allow_html=True)
 st.markdown("""
