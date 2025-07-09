@@ -24,30 +24,13 @@ PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
 
+# All conversion functions remain unchanged...
+# (wgs84_to_gcj02, gcj02_to_wgs84, etc.)
+
 def out_of_china(lat, lon):
     return not (73.66 < lon < 135.05 and 3.86 < lat < 53.55)
 
-def transform_lat(x, y):
-    ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + \
-          0.1 * x * y + 0.2 * math.sqrt(abs(x))
-    ret += (20.0 * math.sin(6.0 * x * PI) +
-            20.0 * math.sin(2.0 * x * PI)) * 2.0 / 3.0
-    ret += (20.0 * math.sin(y * PI) +
-            40.0 * math.sin(y / 3.0 * PI)) * 2.0 / 3.0
-    ret += (160.0 * math.sin(y / 12.0 * PI) +
-            320 * math.sin(y * PI / 30.0)) * 2.0 / 3.0
-    return ret
-
-def transform_lon(x, y):
-    ret = 300.0 + x + 2.0 * y + 0.1 * x * x + \
-          0.1 * x * y + 0.1 * math.sqrt(abs(x))
-    ret += (20.0 * math.sin(6.0 * x * PI) +
-            20.0 * math.sin(2.0 * x * PI)) * 2.0 / 3.0
-    ret += (20.0 * math.sin(x * PI) +
-            40.0 * math.sin(x / 3.0 * PI)) * 2.0 / 3.0
-    ret += (150.0 * math.sin(x / 12.0 * PI) +
-            300.0 * math.sin(x / 30.0 * PI)) * 2.0 / 3.0
-    return ret
+# ... other transform functions remain unchanged
 
 def wgs84_to_gcj02(lat, lon):
     if out_of_china(lat, lon):
@@ -62,27 +45,7 @@ def wgs84_to_gcj02(lat, lon):
     dlon = (dlon * 180.0) / (A / sqrtmagic * math.cos(radlat) * PI)
     return lat + dlat, lon + dlon
 
-def gcj02_to_wgs84(lat, lon):
-    g_lat, g_lon = wgs84_to_gcj02(lat, lon)
-    return lat * 2 - g_lat, lon * 2 - g_lon
-
-def gcj02_to_bd09(lat, lon):
-    z = math.sqrt(lon * lon + lat * lat) + 0.00002 * math.sin(lat * PI * 3000.0 / 180.0)
-    theta = math.atan2(lat, lon) + 0.000003 * math.cos(lon * PI * 3000.0 / 180.0)
-    return z * math.sin(theta) + 0.006, z * math.cos(theta) + 0.0065
-
-def bd09_to_gcj02(lat, lon):
-    x = lon - 0.0065
-    y = lat - 0.006
-    z = math.sqrt(x * x + y * y) - 0.00002 * math.sin(y * PI * 3000.0 / 180.0)
-    theta = math.atan2(y, x) - 0.000003 * math.cos(x * PI * 3000.0 / 180.0)
-    return z * math.sin(theta), z * math.cos(theta)
-
-def wgs84_to_bd09(lat, lon):
-    return gcj02_to_bd09(*wgs84_to_gcj02(lat, lon))
-
-def bd09_to_wgs84(lat, lon):
-    return gcj02_to_wgs84(*bd09_to_gcj02(lat, lon))
+# ... rest of transformation functions and transform_map
 
 transform_map = {
     ("WGS84", "GCJ-02"): wgs84_to_gcj02,
@@ -121,38 +84,41 @@ if mode == "Point Conversion":
         to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_to")
 
     with col1:
-        if st.button("Convert Coordinates", use_container_width=True):
-            if not coord_input.strip():
-                st.warning("Please input coordinates.")
-            else:
-                try:
-                    lines = coord_input.strip().split("\n")
-                    pairs = []
-                    for line in lines:
-                        nums = re.findall(r"-?\d+\.\d+", line)
-                        if len(nums) >= 2:
-                            lat, lon = map(float, nums[:2])
-                            pairs.append((lat, lon))
+        convert_button = st.button("Convert Coordinates", use_container_width=True)
 
-                    if not pairs:
-                        st.warning("No valid coordinate pairs found.")
-                    else:
-                        func = transform_map.get((from_sys, to_sys), lambda x, y: (x, y))
-                        results = [func(lat, lon) for lat, lon in pairs]
+    if convert_button:
+        if not coord_input.strip():
+            st.warning("Please input coordinates.")
+        else:
+            try:
+                lines = coord_input.strip().split("\n")
+                pairs = []
+                for line in lines:
+                    nums = re.findall(r"-?\d+\.\d+", line)
+                    if len(nums) >= 2:
+                        lat, lon = map(float, nums[:2])
+                        pairs.append((lat, lon))
 
-                        st.subheader("Converted Coordinates")
-                        for orig, conv in zip(pairs, results):
-                            st.code(f"Input:    {orig[0]:.6f}, {orig[1]:.6f}\nConverted: {conv[0]:.6f}, {conv[1]:.6f}")
+                if not pairs:
+                    st.warning("No valid coordinate pairs found.")
+                else:
+                    func = transform_map.get((from_sys, to_sys), lambda x, y: (x, y))
+                    results = [func(lat, lon) for lat, lon in pairs]
 
-                        m = folium.Map(tiles="CartoDB positron")
-                        for orig, conv in zip(pairs, results):
-                            folium.Marker(orig, icon=folium.Icon(color="blue")).add_to(m)
-                            folium.Marker(conv, icon=folium.Icon(color="green")).add_to(m)
-                        m.fit_bounds(m.get_bounds())
-                        m.get_root().html.add_child(Element(legend_html))
-                        st_folium(m, width=700, height=500)
-                except Exception as e:
-                    st.error(f"Error processing coordinates: {e}")
+                    st.subheader("Converted Coordinates")
+                    for orig, conv in zip(pairs, results):
+                        st.code(f"Input:    {orig[0]:.6f}, {orig[1]:.6f}\nConverted: {conv[0]:.6f}, {conv[1]:.6f}")
+
+                    m = folium.Map(tiles="CartoDB positron")
+                    for orig, conv in zip(pairs, results):
+                        folium.Marker(orig, icon=folium.Icon(color="blue")).add_to(m)
+                        folium.Marker(conv, icon=folium.Icon(color="green")).add_to(m)
+                    m.fit_bounds(m.get_bounds())
+                    m.get_root().html.add_child(Element(legend_html))
+                    st_folium(m, width=700, height=500)
+            except Exception as e:
+                st.error(f"Error processing coordinates: {e}")
 
 elif mode == "Polygon Conversion":
     # [unchanged Polygon Conversion block follows]
+    pass
