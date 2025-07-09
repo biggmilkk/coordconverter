@@ -108,13 +108,14 @@ legend_html = """
 
 if mode == "Point Conversion":
     st.subheader("Point Coordinate Conversion")
+
+    coord_input = st.text_area("Coordinates Input", placeholder="Paste coordinates here. E.g.\n19.2154, -98.1261\n19 12 55N, 98 07 34W", height=150)
+
     col1, col2 = st.columns(2)
     with col1:
         from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_from")
     with col2:
         to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_to")
-
-    coord_input = st.text_area("Coordinates Input", placeholder="Paste coordinates here. E.g.\n19.2154, -98.1261\n19 12 55N, 98 07 34W", height=150)
 
     if st.button("Convert Coordinates", use_container_width=True):
         if not coord_input.strip():
