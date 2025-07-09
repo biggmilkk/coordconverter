@@ -2,17 +2,23 @@ import streamlit as st
 import math
 import folium
 import re
+import json
+import zipfile
+from io import BytesIO
 from streamlit_folium import st_folium
 from folium import Element
+from xml.etree import ElementTree as ET
 
 st.set_page_config(page_title="Coordinate Reference System Converter", layout="centered")
 
 st.markdown("<h2 style='text-align: center;'>Coordinate Reference System Converter</h2>", unsafe_allow_html=True)
 st.markdown("""
 <p style='text-align: center; font-size: 0.9rem; color: grey;'>
-Convert single or multiple geographic coordinates between WGS84, GCJ-02, and BD09.
+Convert geographic coordinates or polygons between WGS84, GCJ-02, and BD09.
 </p>
 """, unsafe_allow_html=True)
+
+mode = st.radio("Select Conversion Mode", ["Point Conversion", "Polygon Conversion"], horizontal=True)
 
 PI = math.pi
 A = 6378245.0
@@ -126,69 +132,149 @@ def parse_input_coordinates(text):
             i += 1
     return coords
 
-# --- Input Section ---
-input_text = st.text_area("Paste Coordinates (DD, DMS, or DDM)", height=150, placeholder="19.215401, -98.126154\n19 12 55N, 98 07 34W\n19.2154N 98.1261W")
+def extract_coords_from_kml_string(kml_string):
+    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+    root = ET.fromstring(kml_string)
+    polygons = []
+    for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
+        coords = []
+        raw_coords = coord_text.text.strip().split()
+        for coord in raw_coords:
+            parts = coord.split(',')
+            if len(parts) >= 2:
+                lon, lat = map(float, parts[:2])
+                coords.append((lat, lon))
+        if coords and coords[0] != coords[-1]:
+            coords.append(coords[0])
+        if coords:
+            polygons.append(coords)
+    return polygons
 
-col1, col2 = st.columns(2)
-with col1:
-    from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"])
-with col2:
-    to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
+def extract_coords_from_kmz(file_bytes):
+    with zipfile.ZipFile(BytesIO(file_bytes)) as kmz:
+        for name in kmz.namelist():
+            if name.endswith(".kml"):
+                kml_string = kmz.read(name).decode("utf-8")
+                return extract_coords_from_kml_string(kml_string)
+    return []
 
-# --- Convert ---
-if "converted_coords" not in st.session_state:
-    st.session_state.converted_coords = []
+# --- Point Conversion ---
+if mode == "Point Conversion":
+    input_text = st.text_area("Paste Coordinates (DD, DMS, or DDM)", height=150, placeholder="19.215401, -98.126154\n19 12 55N, 98 07 34W\n19.2154N 98.1261W")
+    col1, col2 = st.columns(2)
+    with col1:
+        from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="from_sys")
+    with col2:
+        to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="to_sys")
 
-if st.button("Convert Coordinates", use_container_width=True):
-    parsed_coords = parse_input_coordinates(input_text)
-    if not parsed_coords:
-        st.warning("No valid coordinates found.")
+    if "converted_coords" not in st.session_state:
         st.session_state.converted_coords = []
-    else:
-        converted = []
-        for lat, lon in parsed_coords:
-            if from_sys == to_sys:
-                new_lat, new_lon = lat, lon
+
+    if st.button("Convert Coordinates", use_container_width=True):
+        parsed_coords = parse_input_coordinates(input_text)
+        if not parsed_coords:
+            st.warning("No valid coordinates found.")
+            st.session_state.converted_coords = []
+        else:
+            converted = []
+            for lat, lon in parsed_coords:
+                if from_sys == to_sys:
+                    new_lat, new_lon = lat, lon
+                else:
+                    func = transform_map.get((from_sys, to_sys))
+                    new_lat, new_lon = func(lat, lon)
+                converted.append((lat, lon, new_lat, new_lon))
+            st.session_state.converted_coords = converted
+
+    if st.session_state.converted_coords:
+        st.subheader("Converted Coordinates")
+        converted = st.session_state.converted_coords
+        for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
+            st.text(f"Point {i} → {nlat:.6f}, {nlon:.6f}")
+
+        m = folium.Map(location=[converted[0][0], converted[0][1]], zoom_start=6)
+        for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
+            folium.Marker([olat, olon], tooltip=f"Input {i}", icon=folium.Icon(color="blue")).add_to(m)
+            folium.Marker([nlat, nlon], tooltip=f"Converted {i}", icon=folium.Icon(color="green")).add_to(m)
+
+        bounds = [[min(min(c[0], c[2]) for c in converted), min(min(c[1], c[3]) for c in converted)],
+                  [max(max(c[0], c[2]) for c in converted), max(max(c[1], c[3]) for c in converted)]]
+        m.fit_bounds(bounds, padding=(20, 20))
+
+        legend_html = """
+        <div style="
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-family: Arial, sans-serif;
+            color: #333;
+            z-index: 9999;
+            box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+            border-radius: 4px;">
+            <b>Legend</b><br>
+            <span style='display:inline-block; width:10px; height:10px; background:#1f77b4; border-radius:50%; margin-right:8px;'></span> Input<br>
+            <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
+        </div>
+        """
+        m.get_root().html.add_child(Element(legend_html))
+        with st.container():
+            st_folium(m, width=700, height=500)
+
+# --- Polygon Conversion ---
+elif mode == "Polygon Conversion":
+    uploaded_file = st.file_uploader("Upload Polygon File (KML, KMZ, GeoJSON)", type=["kml", "kmz", "geojson", "json"])
+    col1, col2 = st.columns(2)
+    with col1:
+        from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_from")
+    with col2:
+        to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_to")
+
+    if uploaded_file:
+        try:
+            name = uploaded_file.name.lower()
+            if name.endswith(".geojson") or name.endswith(".json"):
+                geojson = json.load(uploaded_file)
+                features = geojson["features"] if geojson["type"] == "FeatureCollection" else [geojson]
+                polygons = []
+                for feature in features:
+                    geom = feature["geometry"]
+                    if geom["type"].lower() == "polygon":
+                        coords = geom["coordinates"][0]
+                        coords = [(lat, lon) for lon, lat in coords]
+                        polygons.append(coords)
+                    elif geom["type"].lower() == "multipolygon":
+                        for part in geom["coordinates"]:
+                            coords = part[0]
+                            coords = [(lat, lon) for lon, lat in coords]
+                            polygons.append(coords)
+            elif name.endswith(".kml"):
+                doc = uploaded_file.read().decode("utf-8")
+                polygons = extract_coords_from_kml_string(doc)
+            elif name.endswith(".kmz"):
+                polygons = extract_coords_from_kmz(uploaded_file.read())
             else:
-                func = transform_map.get((from_sys, to_sys))
-                new_lat, new_lon = func(lat, lon)
-            converted.append((lat, lon, new_lat, new_lon))
-        st.session_state.converted_coords = converted
+                polygons = []
 
-if st.session_state.converted_coords:
-    st.subheader("Converted Coordinates")
-    converted = st.session_state.converted_coords
-    for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
-        st.text(f"Point {i} → {nlat:.6f}, {nlon:.6f}")
-
-    m = folium.Map(location=[converted[0][0], converted[0][1]], zoom_start=6)
-    for i, (olat, olon, nlat, nlon) in enumerate(converted, 1):
-        folium.Marker([olat, olon], tooltip=f"Input {i}", icon=folium.Icon(color="blue")).add_to(m)
-        folium.Marker([nlat, nlon], tooltip=f"Converted {i}", icon=folium.Icon(color="green")).add_to(m)
-
-    bounds = [[min(min(c[0], c[2]) for c in converted), min(min(c[1], c[3]) for c in converted)],
-              [max(max(c[0], c[2]) for c in converted), max(max(c[1], c[3]) for c in converted)]]
-    m.fit_bounds(bounds, padding=(20, 20))
-
-    legend_html = """
-    <div style="
-        position: absolute;
-        bottom: 30px;
-        left: 30px;
-        background-color: white;
-        border: 1px solid #ccc;
-        padding: 10px 12px;
-        font-size: 13px;
-        font-family: Arial, sans-serif;
-        color: #333;
-        z-index: 9999;
-        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
-        border-radius: 4px;">
-        <b>Legend</b><br>
-        <span style='display:inline-block; width:10px; height:10px; background:#1f77b4; border-radius:50%; margin-right:8px;'></span> Input<br>
-        <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
-    </div>
-    """
-    m.get_root().html.add_child(Element(legend_html))
-    with st.container():
-        st_folium(m, width=700, height=500)
+            if not polygons:
+                st.warning("No valid polygons found.")
+            else:
+                m = folium.Map(tiles="CartoDB positron")
+                for i, coords in enumerate(polygons):
+                    converted = []
+                    for lat, lon in coords:
+                        if from_sys == to_sys:
+                            new_lat, new_lon = lat, lon
+                        else:
+                            func = transform_map.get((from_sys, to_sys))
+                            new_lat, new_lon = func(lat, lon)
+                        converted.append((new_lat, new_lon))
+                    folium.Polygon(locations=coords, color="blue", weight=2, fill_opacity=0.3).add_to(m)
+                    folium.Polygon(locations=converted, color="green", weight=2, fill_opacity=0.3).add_to(m)
+                m.fit_bounds(m.get_bounds())
+                st_folium(m, width=700, height=500)
+        except Exception as e:
+            st.error(f"Error processing file: {e}")
