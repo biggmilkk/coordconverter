@@ -131,6 +131,13 @@ if mode == "Point Conversion":
             src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"])
         with col2:
             tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
+        st.markdown("""
+            <style>
+            div.stButton > button {
+                width: 100%;
+            }
+            </style>
+        """, unsafe_allow_html=True)
         convert_btn = st.form_submit_button("Convert Coordinates")
 
     if convert_btn:
