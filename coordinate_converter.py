@@ -130,8 +130,7 @@ if mode == "Point Conversion":
     with col2:
         to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_to")
 
-    with col1:
-        convert_button = st.button("Convert Coordinates", use_container_width=True)
+    convert_button = st.button("Convert Coordinates", use_container_width=True)
 
     if convert_button:
         if not coord_input.strip():
