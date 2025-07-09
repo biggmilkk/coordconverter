@@ -106,7 +106,49 @@ legend_html = """
 </div>
 """
 
-if mode == "Polygon Conversion":
+if mode == "Point Conversion":
+    col1, col2 = st.columns(2)
+    with col1:
+        from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_from")
+    with col2:
+        to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_to")
+
+    coord_input = st.text_area("Enter Coordinates (one pair per line)", placeholder="e.g. 19.2154, -98.1261", height=150)
+
+    if st.button("Convert Coordinates"):
+        if not coord_input.strip():
+            st.warning("Please input coordinates.")
+        else:
+            try:
+                lines = coord_input.strip().split("\n")
+                pairs = []
+                for line in lines:
+                    nums = re.findall(r"-?\d+\.\d+", line)
+                    if len(nums) >= 2:
+                        lat, lon = map(float, nums[:2])
+                        pairs.append((lat, lon))
+
+                if not pairs:
+                    st.warning("No valid coordinate pairs found.")
+                else:
+                    func = transform_map.get((from_sys, to_sys), lambda x, y: (x, y))
+                    results = [func(lat, lon) for lat, lon in pairs]
+
+                    st.subheader("Converted Coordinates")
+                    for orig, conv in zip(pairs, results):
+                        st.code(f"Input:    {orig[0]:.6f}, {orig[1]:.6f}\nConverted: {conv[0]:.6f}, {conv[1]:.6f}")
+
+                    m = folium.Map(tiles="CartoDB positron")
+                    for orig, conv in zip(pairs, results):
+                        folium.Marker(orig, icon=folium.Icon(color="blue")).add_to(m)
+                        folium.Marker(conv, icon=folium.Icon(color="green")).add_to(m)
+                    m.fit_bounds(m.get_bounds())
+                    m.get_root().html.add_child(Element(legend_html))
+                    st_folium(m, width=700, height=500)
+            except Exception as e:
+                st.error(f"Error processing coordinates: {e}")
+
+elif mode == "Polygon Conversion":
     uploaded_file = st.file_uploader("Upload Polygon File (KML, KMZ, GeoJSON)", type=["kml", "kmz", "geojson", "json"])
     col1, col2 = st.columns(2)
     with col1:
