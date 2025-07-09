@@ -123,20 +123,20 @@ legend_html = """<div style="
 </div>"""
 
 if mode == "Point Conversion":
-    col1, col2 = st.columns([2, 2])
+    st.text_input("Enter Latitude, Longitude", key="pt_input")
+    col1, col2 = st.columns(2)
     with col1:
-        point_input = st.text_input("Enter Latitude, Longitude", key="pt_input")
+        src = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="pt_from")
     with col2:
-        st.write("")  # spacer
+        tgt = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="pt_to")
 
-    src = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="pt_from")
-    tgt = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="pt_to")
+    convert_button = st.button("Convert Coordinates", use_container_width=True)
 
-    btn = st.button("Convert Coordinates")
-    if btn:
-        if point_input.strip():
+    if convert_button:
+        point_input = st.session_state.pt_input.strip()
+        if point_input:
             try:
-                lat, lon = map(float, re.split(r"[,\s]+", point_input.strip()))
+                lat, lon = map(float, re.split(r"[\s,]+", point_input))
                 transform = transform_map.get((src, tgt))
                 if not transform:
                     st.warning("Transformation not supported.")
