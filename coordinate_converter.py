@@ -122,7 +122,42 @@ legend_html = """<div style="
     <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
 </div>"""
 
-if mode == "Polygon Conversion":
+if mode == "Point Conversion":
+    col1, col2 = st.columns([2, 2])
+    with col1:
+        point_input = st.text_input("Enter Latitude, Longitude", key="pt_input")
+    with col2:
+        st.write("")  # spacer
+
+    src = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="pt_from")
+    tgt = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="pt_to")
+
+    btn = st.button("Convert Coordinates")
+    if btn:
+        if point_input.strip():
+            try:
+                lat, lon = map(float, re.split(r"[,\s]+", point_input.strip()))
+                transform = transform_map.get((src, tgt))
+                if not transform:
+                    st.warning("Transformation not supported.")
+                else:
+                    conv_lat, conv_lon = transform(lat, lon)
+                    m = folium.Map(location=[lat, lon], zoom_start=12, tiles="CartoDB positron")
+                    folium.Marker([lat, lon], popup="Input", icon=folium.Icon(color="blue")).add_to(m)
+                    folium.Marker([conv_lat, conv_lon], popup="Converted", icon=folium.Icon(color="green")).add_to(m)
+                    m.get_root().html.add_child(Element(legend_html))
+                    st_folium(m, height=500, width=700)
+
+                    st.subheader("Input Coordinates")
+                    st.code(f"{lat:.6f}, {lon:.6f}")
+                    st.subheader("Converted Coordinates")
+                    st.code(f"{conv_lat:.6f}, {conv_lon:.6f}")
+            except Exception as e:
+                st.error(f"Invalid input format. Please enter in 'lat, lon' format. Error: {e}")
+        else:
+            st.warning("Please input coordinates.")
+
+elif mode == "Polygon Conversion":
     uploaded = st.file_uploader("Upload Polygon File (KML, KMZ, or GeoJSON)", type=["kml", "kmz", "geojson"])
     source_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_from")
     target_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_to")
