@@ -24,13 +24,30 @@ PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
 
-# All conversion functions remain unchanged...
-# (wgs84_to_gcj02, gcj02_to_wgs84, etc.)
-
 def out_of_china(lat, lon):
     return not (73.66 < lon < 135.05 and 3.86 < lat < 53.55)
 
-# ... other transform functions remain unchanged
+def transform_lat(x, y):
+    ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + \
+          0.1 * x * y + 0.2 * math.sqrt(abs(x))
+    ret += (20.0 * math.sin(6.0 * x * PI) + 20.0 *
+            math.sin(2.0 * x * PI)) * 2.0 / 3.0
+    ret += (20.0 * math.sin(y * PI) + 40.0 *
+            math.sin(y / 3.0 * PI)) * 2.0 / 3.0
+    ret += (160.0 * math.sin(y / 12.0 * PI) + 320 *
+            math.sin(y * PI / 30.0)) * 2.0 / 3.0
+    return ret
+
+def transform_lon(x, y):
+    ret = 300.0 + x + 2.0 * y + 0.1 * x * x + \
+          0.1 * x * y + 0.1 * math.sqrt(abs(x))
+    ret += (20.0 * math.sin(6.0 * x * PI) + 20.0 *
+            math.sin(2.0 * x * PI)) * 2.0 / 3.0
+    ret += (20.0 * math.sin(x * PI) + 40.0 *
+            math.sin(x / 3.0 * PI)) * 2.0 / 3.0
+    ret += (150.0 * math.sin(x / 12.0 * PI) + 300.0 *
+            math.sin(x / 30.0 * PI)) * 2.0 / 3.0
+    return ret
 
 def wgs84_to_gcj02(lat, lon):
     if out_of_china(lat, lon):
@@ -45,7 +62,37 @@ def wgs84_to_gcj02(lat, lon):
     dlon = (dlon * 180.0) / (A / sqrtmagic * math.cos(radlat) * PI)
     return lat + dlat, lon + dlon
 
-# ... rest of transformation functions and transform_map
+def gcj02_to_wgs84(lat, lon):
+    glat, glon = wgs84_to_gcj02(lat, lon)
+    dlat = glat - lat
+    dlon = glon - lon
+    return lat - dlat, lon - dlon
+
+def gcj02_to_bd09(lat, lon):
+    x = lon
+    y = lat
+    z = math.sqrt(x * x + y * y) + 0.00002 * math.sin(y * PI * 3000.0 / 180.0)
+    theta = math.atan2(y, x) + 0.000003 * math.cos(x * PI * 3000.0 / 180.0)
+    bd_lon = z * math.cos(theta) + 0.0065
+    bd_lat = z * math.sin(theta) + 0.006
+    return bd_lat, bd_lon
+
+def bd09_to_gcj02(lat, lon):
+    x = lon - 0.0065
+    y = lat - 0.006
+    z = math.sqrt(x * x + y * y) - 0.00002 * math.sin(y * PI * 3000.0 / 180.0)
+    theta = math.atan2(y, x) - 0.000003 * math.cos(x * PI * 3000.0 / 180.0)
+    gg_lon = z * math.cos(theta)
+    gg_lat = z * math.sin(theta)
+    return gg_lat, gg_lon
+
+def wgs84_to_bd09(lat, lon):
+    gcj_lat, gcj_lon = wgs84_to_gcj02(lat, lon)
+    return gcj02_to_bd09(gcj_lat, gcj_lon)
+
+def bd09_to_wgs84(lat, lon):
+    gcj_lat, gcj_lon = bd09_to_gcj02(lat, lon)
+    return gcj02_to_wgs84(gcj_lat, gcj_lon)
 
 transform_map = {
     ("WGS84", "GCJ-02"): wgs84_to_gcj02,
@@ -120,5 +167,67 @@ if mode == "Point Conversion":
                 st.error(f"Error processing coordinates: {e}")
 
 elif mode == "Polygon Conversion":
-    # [unchanged Polygon Conversion block follows]
-    pass
+    st.subheader("Polygon Coordinate Conversion")
+    st.markdown("Upload a KML, KMZ, or GeoJSON file to convert its coordinates between systems.")
+    uploaded_file = st.file_uploader("Upload File", type=["kml", "kmz", "geojson", "json"])
+
+    col1, col2 = st.columns(2)
+    with col1:
+        from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_from")
+    with col2:
+        to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_to")
+
+    if uploaded_file:
+        file_type = uploaded_file.name.split('.')[-1].lower()
+        coords_list = []
+
+        try:
+            if file_type in ["geojson", "json"]:
+                geojson = json.load(uploaded_file)
+                features = geojson["features"] if geojson["type"] == "FeatureCollection" else [geojson]
+                for feature in features:
+                    geom = feature["geometry"]
+                    if geom["type"].lower() == "polygon":
+                        coords_list.append(geom["coordinates"][0])
+            elif file_type == "kml":
+                text = uploaded_file.read().decode("utf-8")
+                ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+                root = ET.fromstring(text)
+                for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
+                    raw_coords = coord_text.text.strip().split()
+                    coords = []
+                    for pair in raw_coords:
+                        lon, lat = map(float, pair.split(",")[:2])
+                        coords.append([lon, lat])
+                    coords_list.append(coords)
+            elif file_type == "kmz":
+                with zipfile.ZipFile(BytesIO(uploaded_file.read())) as z:
+                    for name in z.namelist():
+                        if name.endswith(".kml"):
+                            text = z.read(name).decode("utf-8")
+                            ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+                            root = ET.fromstring(text)
+                            for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
+                                raw_coords = coord_text.text.strip().split()
+                                coords = []
+                                for pair in raw_coords:
+                                    lon, lat = map(float, pair.split(",")[:2])
+                                    coords.append([lon, lat])
+                                coords_list.append(coords)
+
+            if coords_list:
+                func = transform_map.get((from_sys, to_sys), lambda x, y: (x, y))
+                m = folium.Map(tiles="CartoDB positron")
+
+                for coords in coords_list:
+                    original = [(lat, lon) for lon, lat in coords]
+                    transformed = [func(lat, lon) for lat, lon in original]
+                    folium.Polygon(locations=original, color="blue", fill=False).add_to(m)
+                    folium.Polygon(locations=transformed, color="green", fill=True, fill_opacity=0.3).add_to(m)
+
+                m.fit_bounds(m.get_bounds())
+                m.get_root().html.add_child(Element(legend_html))
+                st_folium(m, width=700, height=500)
+
+        except Exception as e:
+            st.error(f"Error processing file: {e}")
