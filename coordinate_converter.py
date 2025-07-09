@@ -107,74 +107,45 @@ legend_html = """
 """
 
 if mode == "Point Conversion":
-    # existing Point Conversion logic remains unchanged
-    pass
-elif mode == "Polygon Conversion":
-    st.subheader("Polygon Coordinate Conversion")
+    st.subheader("Point Coordinate Conversion")
 
-    uploaded_files = st.file_uploader("Upload Polygon Files (KML, KMZ, or GeoJSON)", type=["kml", "kmz", "geojson"], accept_multiple_files=True)
+    coord_input = st.text_area("Coordinates Input", placeholder="Paste coordinates here. E.g.\n19.2154, -98.1261\n19 12 55N, 98 07 34W", height=150)
 
     col1, col2 = st.columns(2)
     with col1:
-        from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_from")
+        from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_from")
     with col2:
-        to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_to")
+        to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_to")
 
-    if uploaded_files:
-        polygons = []
+    if st.button("Convert Coordinates", use_container_width=True):
+        if not coord_input.strip():
+            st.warning("Please input coordinates.")
+        else:
+            try:
+                lines = coord_input.strip().split("\n")
+                pairs = []
+                for line in lines:
+                    nums = re.findall(r"-?\d+\.?\d*", line)
+                    if len(nums) >= 2:
+                        lat, lon = map(float, nums[:2])
+                        pairs.append((lat, lon))
 
-        def extract_coords_from_kml_string(kml_string):
-            ns = {'kml': 'http://www.opengis.net/kml/2.2'}
-            root = ET.fromstring(kml_string)
-            coords = []
-            for coord_text in root.findall(".//kml:coordinates", ns):
-                raw = coord_text.text.strip().split()
-                points = [(float(p.split(",")[1]), float(p.split(",")[0])) for p in raw]
-                coords.append(points)
-            return coords
+                if not pairs:
+                    st.warning("No valid coordinate pairs found.")
+                else:
+                    func = transform_map.get((from_sys, to_sys), lambda x, y: (x, y))
+                    results = [func(lat, lon) for lat, lon in pairs]
 
-        def extract_coords_from_kmz(file_bytes):
-            with zipfile.ZipFile(BytesIO(file_bytes)) as kmz:
-                for name in kmz.namelist():
-                    if name.endswith(".kml"):
-                        kml_string = kmz.read(name).decode("utf-8")
-                        return extract_coords_from_kml_string(kml_string)
-            return []
+                    st.subheader("Converted Coordinates")
+                    for orig, conv in zip(pairs, results):
+                        st.code(f"Input:    {orig[0]:.6f}, {orig[1]:.6f}\nConverted: {conv[0]:.6f}, {conv[1]:.6f}")
 
-        for file in uploaded_files:
-            ext = file.name.split(".")[-1].lower()
-            if ext == "geojson":
-                gj = json.load(file)
-                features = gj["features"] if gj["type"] == "FeatureCollection" else [gj]
-                for f in features:
-                    geom = f["geometry"]
-                    if geom["type"] == "Polygon":
-                        coords = [(lat, lon) for lon, lat in geom["coordinates"][0]]
-                        polygons.append(coords)
-                    elif geom["type"] == "MultiPolygon":
-                        for part in geom["coordinates"]:
-                            coords = [(lat, lon) for lon, lat in part[0]]
-                            polygons.append(coords)
-            elif ext == "kml":
-                kml = file.read().decode("utf-8")
-                polygons.extend(extract_coords_from_kml_string(kml))
-            elif ext == "kmz":
-                polygons.extend(extract_coords_from_kmz(file.read()))
-
-        func = transform_map.get((from_sys, to_sys), lambda x, y: (x, y))
-        converted = [[func(lat, lon) for lat, lon in poly] for poly in polygons]
-
-        st.subheader("Converted Polygons")
-        m = folium.Map(tiles="CartoDB positron")
-        for poly, conv in zip(polygons, converted):
-            folium.Polygon(locations=poly, color="blue", fill=False).add_to(m)
-            folium.Polygon(locations=conv, color="green", fill=False).add_to(m)
-
-        if polygons:
-            all_points = sum(polygons, [])
-            bounds = [[min(p[0] for p in all_points), min(p[1] for p in all_points)],
-                      [max(p[0] for p in all_points), max(p[1] for p in all_points)]]
-            m.fit_bounds(bounds)
-
-        m.get_root().html.add_child(Element(legend_html))
-        st_folium(m, width=700, height=500)
+                    m = folium.Map(tiles="CartoDB positron")
+                    for orig, conv in zip(pairs, results):
+                        folium.Marker(orig, icon=folium.Icon(color="blue")).add_to(m)
+                        folium.Marker(conv, icon=folium.Icon(color="green")).add_to(m)
+                    m.fit_bounds(m.get_bounds())
+                    m.get_root().html.add_child(Element(legend_html))
+                    st_folium(m, width=700, height=500)
+            except Exception as e:
+                st.error(f"Error processing coordinates: {e}")
