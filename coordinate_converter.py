@@ -86,7 +86,6 @@ transform_map = {
     ("BD09", "WGS84"): bd09_to_wgs84
 }
 
-# Legend HTML snippet
 legend_html = """
 <div style="
     position: absolute;
@@ -107,14 +106,39 @@ legend_html = """
 </div>
 """
 
-# Append legend to Polygon Conversion map as well
-elif mode == "Polygon Conversion":
+if mode == "Polygon Conversion":
     uploaded_file = st.file_uploader("Upload Polygon File (KML, KMZ, GeoJSON)", type=["kml", "kmz", "geojson", "json"])
     col1, col2 = st.columns(2)
     with col1:
         from_sys = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_from")
     with col2:
         to_sys = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_to")
+
+    def extract_coords_from_kml_string(kml_string):
+        ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+        root = ET.fromstring(kml_string)
+        polygons = []
+        for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
+            coords = []
+            raw_coords = coord_text.text.strip().split()
+            for coord in raw_coords:
+                parts = coord.split(',')
+                if len(parts) >= 2:
+                    lon, lat = map(float, parts[:2])
+                    coords.append((lat, lon))
+            if coords and coords[0] != coords[-1]:
+                coords.append(coords[0])
+            if coords:
+                polygons.append(coords)
+        return polygons
+
+    def extract_coords_from_kmz(file_bytes):
+        with zipfile.ZipFile(BytesIO(file_bytes)) as kmz:
+            for name in kmz.namelist():
+                if name.endswith(".kml"):
+                    kml_string = kmz.read(name).decode("utf-8")
+                    return extract_coords_from_kml_string(kml_string)
+        return []
 
     if uploaded_file:
         try:
@@ -146,7 +170,7 @@ elif mode == "Polygon Conversion":
                 st.warning("No valid polygons found.")
             else:
                 m = folium.Map(tiles="CartoDB positron")
-                for i, coords in enumerate(polygons):
+                for coords in polygons:
                     converted = []
                     for lat, lon in coords:
                         if from_sys == to_sys:
