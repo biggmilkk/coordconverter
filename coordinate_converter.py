@@ -123,7 +123,7 @@ legend_html = """<div style="
     <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
 </div>"""
 
-# Session state
+# Ensure session state is initialized
 if "converted_coords" not in st.session_state:
     st.session_state["converted_coords"] = None
 if "input_coords" not in st.session_state:
@@ -175,7 +175,7 @@ if mode == "Point Conversion":
         st_folium(m, width=700, height=400)
 
 # --- Polygon Conversion UI ---
-elif mode == "Polygon Conversion":
+if mode == "Polygon Conversion":
     col1, col2 = st.columns(2)
     with col1:
         src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_src")
@@ -186,7 +186,7 @@ elif mode == "Polygon Conversion":
 
     if uploaded_file:
         try:
-            polygons = []
+            kml_string, geojson = None, None
             if uploaded_file.name.endswith(".kmz"):
                 with zipfile.ZipFile(uploaded_file) as kmz:
                     for name in kmz.namelist():
@@ -197,8 +197,8 @@ elif mode == "Polygon Conversion":
                 kml_string = uploaded_file.read().decode("utf-8")
             elif uploaded_file.name.endswith(".geojson"):
                 geojson = json.load(uploaded_file)
-                kml_string = None
 
+            polygons = []
             if kml_string:
                 ns = {'kml': 'http://www.opengis.net/kml/2.2'}
                 root = ET.fromstring(kml_string)
@@ -226,10 +226,11 @@ elif mode == "Polygon Conversion":
 
             if polygons:
                 transform = transform_map.get((src_crs, tgt_crs))
-                if not transform:
-                    st.warning("No transformation defined for selected CRS pair.")
-                else:
-                    converted_polygons = [[transform(lat, lon) for lat, lon in poly] for poly in polygons]
+                if transform:
+                    converted_polygons = []
+                    for poly in polygons:
+                        converted = [transform(lat, lon) for lat, lon in poly]
+                        converted_polygons.append(converted)
 
                     m = folium.Map(tiles="CartoDB positron")
                     for poly in polygons:
@@ -263,6 +264,9 @@ elif mode == "Polygon Conversion":
                         st.download_button("Download KML", kml.kml().encode("utf-8"), file_name="converted_polygons.kml")
                     with col2:
                         st.download_button("Download GeoJSON", json.dumps(geojson_data).encode("utf-8"), file_name="converted_polygons.geojson")
-
+                else:
+                    st.warning("No transformation defined for selected CRS pair.")
+            else:
+                st.warning("No valid polygons found in uploaded file.")
         except Exception as e:
             st.error(f"Error processing file: {e}")
