@@ -263,8 +263,11 @@ elif mode == "Polygon Conversion":
                         ]
                     }
 
-                    st.download_button("Download KML", kml.kml().encode("utf-8"), file_name="converted_polygons.kml", use_container_width=True)
-                    st.download_button("Download GeoJSON", json.dumps(geojson_data).encode("utf-8"), file_name="converted_polygons.geojson", use_container_width=True)
+                    dcol1, dcol2 = st.columns(2)
+                    with dcol1:
+                        st.download_button("Download KML", kml.kml().encode("utf-8"), file_name="converted_polygons.kml", use_container_width=True)
+                    with dcol2:
+                        st.download_button("Download GeoJSON", json.dumps(geojson_data).encode("utf-8"), file_name="converted_polygons.geojson", use_container_width=True)
 
                     m = folium.Map(tiles="CartoDB positron")
                     all_points = []
