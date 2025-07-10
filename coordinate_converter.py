@@ -123,7 +123,11 @@ legend_html = """<div style="
     <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
 </div>"""
 
-# UI logic for point and polygon conversion modes follows below.
+# Session state
+if "converted_coords" not in st.session_state:
+    st.session_state["converted_coords"] = None
+if "input_coords" not in st.session_state:
+    st.session_state["input_coords"] = None
 
 # --- Point Conversion UI ---
 if mode == "Point Conversion":
@@ -141,22 +145,29 @@ if mode == "Point Conversion":
             try:
                 lat, lon = map(float, re.findall(r"[-+]?\d*\.?\d+", coord_input))
                 transform = transform_map.get((src_crs, tgt_crs))
-                if not transform:
-                    st.warning("No transformation defined for selected CRS pair.")
-                else:
+                if transform:
                     new_lat, new_lon = transform(lat, lon)
-                    st.subheader("Converted Coordinates")
-                    st.code(f"{new_lat:.6f}, {new_lon:.6f}")
-
-                    m = folium.Map(location=[lat, lon], zoom_start=12)
-                    folium.Marker([lat, lon], tooltip="Input", icon=folium.Icon(color='blue')).add_to(m)
-                    folium.Marker([new_lat, new_lon], tooltip="Converted", icon=folium.Icon(color='green')).add_to(m)
-                    m.get_root().html.add_child(Element(legend_html))
-                    st_folium(m, width=700, height=400)
+                    st.session_state["input_coords"] = (lat, lon)
+                    st.session_state["converted_coords"] = (new_lat, new_lon)
+                else:
+                    st.warning("No transformation defined for selected CRS pair.")
             except Exception as e:
                 st.error(f"Invalid input format. Please enter in 'lat, lon' format. Error: {e}")
         else:
             st.warning("Please input coordinates.")
+
+    if st.session_state["converted_coords"] and st.session_state["input_coords"]:
+        lat, lon = st.session_state["input_coords"]
+        new_lat, new_lon = st.session_state["converted_coords"]
+
+        st.subheader("Converted Coordinates")
+        st.code(f"{new_lat:.6f}, {new_lon:.6f}")
+
+        m = folium.Map(location=[lat, lon], zoom_start=12)
+        folium.Marker([lat, lon], tooltip="Input", icon=folium.Icon(color='blue')).add_to(m)
+        folium.Marker([new_lat, new_lon], tooltip="Converted", icon=folium.Icon(color='green')).add_to(m)
+        m.get_root().html.add_child(Element(legend_html))
+        st_folium(m, width=700, height=400)
 
 # --- Polygon Conversion UI ---
 elif mode == "Polygon Conversion":
