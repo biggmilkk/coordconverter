@@ -263,11 +263,8 @@ elif mode == "Polygon Conversion":
                         ]
                     }
 
-                    d1, d2 = st.columns(2)
-                    with d1:
-                        st.download_button("Download KML", kml.kml().encode("utf-8"), file_name="converted_polygons.kml")
-                    with d2:
-                        st.download_button("Download GeoJSON", json.dumps(geojson_data).encode("utf-8"), file_name="converted_polygons.geojson")
+                    st.download_button("Download KML", kml.kml().encode("utf-8"), file_name="converted_polygons.kml", use_container_width=True)
+                    st.download_button("Download GeoJSON", json.dumps(geojson_data).encode("utf-8"), file_name="converted_polygons.geojson", use_container_width=True)
 
                     m = folium.Map(tiles="CartoDB positron")
                     all_points = []
@@ -290,4 +287,3 @@ elif mode == "Polygon Conversion":
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
-
