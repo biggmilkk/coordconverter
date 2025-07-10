@@ -123,11 +123,18 @@ legend_html = """<div style="
     <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
 </div>"""
 
-# Ensure session state is initialized
+# Session state initialization
 if "converted_coords" not in st.session_state:
     st.session_state["converted_coords"] = None
 if "input_coords" not in st.session_state:
     st.session_state["input_coords"] = None
+
+# Clear session states when switching modes
+if "last_mode" not in st.session_state:
+    st.session_state.last_mode = mode
+if st.session_state.last_mode != mode:
+    st.session_state.clear()
+    st.session_state.last_mode = mode
 
 # --- Conversion UI ---
 if mode == "Point Conversion":
@@ -283,3 +290,4 @@ elif mode == "Polygon Conversion":
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
+
