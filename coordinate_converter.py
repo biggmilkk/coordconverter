@@ -25,6 +25,7 @@ PI = math.pi
 A = 6378245.0
 EE = 0.00669342162296594323
 
+# --- Coordinate transformation functions ---
 def out_of_china(lat, lon):
     return not (73.66 < lon < 135.05 and 3.86 < lat < 53.55)
 
@@ -122,24 +123,18 @@ legend_html = """<div style="
     <span style='display:inline-block; width:10px; height:10px; background:#2ca02c; border-radius:50%; margin-right:8px;'></span> Converted
 </div>"""
 
+# UI logic for point and polygon conversion modes follows below.
+
+# --- Point Conversion UI ---
 if mode == "Point Conversion":
-    with st.form(key="point_conversion_form"):
-        coord_input = st.text_input("Enter Coordinates (latitude, longitude)", placeholder="e.g. 39.9042, 116.4074")
-        col1, col2 = st.columns(2)
-        with col1:
-            src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"])
-        with col2:
-            tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"])
+    col1, col2 = st.columns(2)
+    with col1:
+        src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_src")
+    with col2:
+        tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_tgt")
 
-        convert_btn = st.form_submit_button("Convert Coordinates")
-
-        st.markdown("""
-            <style>
-            div.stButton > button {
-                width: 100% !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
+    coord_input = st.text_input("Enter Coordinates (latitude, longitude)", placeholder="e.g. 39.9042, 116.4074")
+    convert_btn = st.button("Convert Coordinates", use_container_width=True)
 
     if convert_btn:
         if coord_input:
@@ -163,18 +158,19 @@ if mode == "Point Conversion":
         else:
             st.warning("Please input coordinates.")
 
+# --- Polygon Conversion UI ---
 elif mode == "Polygon Conversion":
-    st.markdown("### Upload Polygon File")
-    uploaded_file = st.file_uploader("Upload KML, KMZ, or GeoJSON", type=["kml", "kmz", "geojson"])
-
     col1, col2 = st.columns(2)
     with col1:
-        src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="src_poly")
+        src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_src")
     with col2:
-        tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="tgt_poly")
+        tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="poly_tgt")
+
+    uploaded_file = st.file_uploader("Upload KML, KMZ, or GeoJSON", type=["kml", "kmz", "geojson"])
 
     if uploaded_file:
         try:
+            polygons = []
             if uploaded_file.name.endswith(".kmz"):
                 with zipfile.ZipFile(uploaded_file) as kmz:
                     for name in kmz.namelist():
@@ -186,14 +182,10 @@ elif mode == "Polygon Conversion":
             elif uploaded_file.name.endswith(".geojson"):
                 geojson = json.load(uploaded_file)
                 kml_string = None
-            else:
-                st.error("Unsupported file format.")
-                kml_string = None
 
             if kml_string:
                 ns = {'kml': 'http://www.opengis.net/kml/2.2'}
                 root = ET.fromstring(kml_string)
-                polygons = []
                 for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
                     coords = []
                     raw_coords = coord_text.text.strip().split()
@@ -205,7 +197,6 @@ elif mode == "Polygon Conversion":
                     if coords:
                         polygons.append(coords)
             elif geojson:
-                polygons = []
                 features = geojson["features"] if geojson["type"] == "FeatureCollection" else [geojson]
                 for feature in features:
                     geom = feature["geometry"]
@@ -222,10 +213,7 @@ elif mode == "Polygon Conversion":
                 if not transform:
                     st.warning("No transformation defined for selected CRS pair.")
                 else:
-                    converted_polygons = []
-                    for poly in polygons:
-                        converted = [transform(lat, lon) for lat, lon in poly]
-                        converted_polygons.append(converted)
+                    converted_polygons = [[transform(lat, lon) for lat, lon in poly] for poly in polygons]
 
                     m = folium.Map(tiles="CartoDB positron")
                     for poly in polygons:
