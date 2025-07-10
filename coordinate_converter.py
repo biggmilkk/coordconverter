@@ -138,7 +138,6 @@ if st.session_state.last_mode != mode:
 
 # --- Conversion UI ---
 if mode == "Point Conversion":
-    st.markdown("### Coordinate Input")
     col1, col2 = st.columns(2)
     with col1:
         src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="src_point")
@@ -179,7 +178,6 @@ if mode == "Point Conversion":
         st_folium(m, width=700, height=400, returned_objects=[])
 
 elif mode == "Polygon Conversion":
-    st.markdown("### Coordinate System")
     col1, col2 = st.columns(2)
     with col1:
         src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="src_poly")
