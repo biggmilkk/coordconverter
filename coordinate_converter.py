@@ -154,11 +154,13 @@ if mode == "Point Conversion":
                     st.session_state["converted_coords"] = (lat, lon, new_lat, new_lon)
                     st.session_state["show_point_result"] = True
             except Exception as e:
+                st.session_state.pop("converted_coords", None)
+                st.session_state["show_point_result"] = False
                 st.error(f"Invalid input format. Please enter in 'lat, lon' format. Error: {e}")
         else:
             st.warning("Please input coordinates.")
 
-    if st.session_state.get("show_point_result"):
+    if st.session_state.get("show_point_result") and "converted_coords" in st.session_state:
         lat, lon, new_lat, new_lon = st.session_state["converted_coords"]
         st.subheader("Converted Coordinates")
         st.code(f"{new_lat:.6f}, {new_lon:.6f}")
@@ -167,7 +169,7 @@ if mode == "Point Conversion":
         folium.Marker([lat, lon], tooltip="Input", icon=folium.Icon(color='blue')).add_to(m)
         folium.Marker([new_lat, new_lon], tooltip="Converted", icon=folium.Icon(color='green')).add_to(m)
         m.get_root().html.add_child(Element(legend_html))
-        st_folium(m, width=700, height=400)
+        st_folium(m, width=700, height=400, returned_objects=[])
 
 elif mode == "Polygon Conversion":
     st.markdown("### Coordinate System")
@@ -277,7 +279,7 @@ elif mode == "Polygon Conversion":
                         m.fit_bounds(bounds, padding=(5, 5))
 
                     m.get_root().html.add_child(Element(legend_html))
-                    st_folium(m, width=700, height=400)
+                    st_folium(m, width=700, height=400, returned_objects=[])
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
