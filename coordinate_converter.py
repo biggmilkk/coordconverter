@@ -129,42 +129,37 @@ if "converted_coords" not in st.session_state:
 if "input_coords" not in st.session_state:
     st.session_state["input_coords"] = None
 
-# --- Point Conversion UI ---
+# --- Conversion UI ---
 if mode == "Point Conversion":
+    st.markdown("### Coordinate Input")
     col1, col2 = st.columns(2)
     with col1:
-        src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_src")
+        src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="src_point")
     with col2:
-        tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="point_tgt")
+        tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="tgt_point")
 
     coord_input = st.text_input("Enter Coordinates (latitude, longitude)", placeholder="e.g. 39.9042, 116.4074")
     convert_btn = st.button("Convert Coordinates", use_container_width=True)
 
     if convert_btn:
+        st.session_state["show_point_result"] = False
         if coord_input:
             try:
                 lat, lon = map(float, re.findall(r"[-+]?\d*\.?\d+", coord_input))
                 transform = transform_map.get((src_crs, tgt_crs))
-                if transform:
-                    new_lat, new_lon = transform(lat, lon)
-                    st.session_state["input_coords"] = (lat, lon)
-                    st.session_state["converted_coords"] = (new_lat, new_lon)
-                else:
+                if not transform:
                     st.warning("No transformation defined for selected CRS pair.")
-                    st.session_state["converted_coords"] = None
+                else:
+                    new_lat, new_lon = transform(lat, lon)
+                    st.session_state["converted_coords"] = (lat, lon, new_lat, new_lon)
+                    st.session_state["show_point_result"] = True
             except Exception as e:
-                st.session_state["converted_coords"] = None
-                st.session_state["input_coords"] = None
                 st.error(f"Invalid input format. Please enter in 'lat, lon' format. Error: {e}")
         else:
             st.warning("Please input coordinates.")
-            st.session_state["converted_coords"] = None
-            st.session_state["input_coords"] = None
 
-    if st.session_state["converted_coords"] and st.session_state["input_coords"]:
-        lat, lon = st.session_state["input_coords"]
-        new_lat, new_lon = st.session_state["converted_coords"]
-
+    if st.session_state.get("show_point_result"):
+        lat, lon, new_lat, new_lon = st.session_state["converted_coords"]
         st.subheader("Converted Coordinates")
         st.code(f"{new_lat:.6f}, {new_lon:.6f}")
 
@@ -174,7 +169,6 @@ if mode == "Point Conversion":
         m.get_root().html.add_child(Element(legend_html))
         st_folium(m, width=700, height=400)
 
-# --- Polygon Conversion UI ---
 elif mode == "Polygon Conversion":
     st.markdown("### Upload Polygon File")
     col1, col2 = st.columns(2)
@@ -283,4 +277,3 @@ elif mode == "Polygon Conversion":
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
-
