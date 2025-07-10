@@ -151,10 +151,15 @@ if mode == "Point Conversion":
                     st.session_state["converted_coords"] = (new_lat, new_lon)
                 else:
                     st.warning("No transformation defined for selected CRS pair.")
+                    st.session_state["converted_coords"] = None
             except Exception as e:
+                st.session_state["converted_coords"] = None
+                st.session_state["input_coords"] = None
                 st.error(f"Invalid input format. Please enter in 'lat, lon' format. Error: {e}")
         else:
             st.warning("Please input coordinates.")
+            st.session_state["converted_coords"] = None
+            st.session_state["input_coords"] = None
 
     if st.session_state["converted_coords"] and st.session_state["input_coords"]:
         lat, lon = st.session_state["input_coords"]
