@@ -170,66 +170,83 @@ if mode == "Point Conversion":
         st_folium(m, width=700, height=400)
 
 elif mode == "Polygon Conversion":
-    st.markdown("### Upload Polygon File")
+    st.markdown("### Coordinate System")
     col1, col2 = st.columns(2)
     with col1:
         src_crs = st.selectbox("Source Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="src_poly")
     with col2:
         tgt_crs = st.selectbox("Target Coordinate System", ["WGS84", "GCJ-02", "BD09"], key="tgt_poly")
 
-    uploaded_file = st.file_uploader("Upload KML, KMZ, or GeoJSON", type=["kml", "kmz", "geojson"])
+    input_mode = st.radio("Choose Input Method", ["Paste Coordinates", "Upload Map Files"], horizontal=True)
 
-    if uploaded_file:
+    if input_mode == "Paste Coordinates":
+        coord_input = st.text_area("Coordinates:", height=150, key="coord_input")
+    else:
+        uploaded_files = st.file_uploader("Upload Polygon Files (KML, KMZ, GeoJSON)", type=["kml", "kmz", "geojson"], accept_multiple_files=True)
+
+    convert_poly_btn = st.button("Convert Polygon", use_container_width=True)
+
+    if convert_poly_btn:
+        polygons = []
         try:
-            polygons = []
-            kml_string = None
-            geojson = None
-
-            if uploaded_file.name.endswith(".kmz"):
-                with zipfile.ZipFile(uploaded_file) as kmz:
-                    for name in kmz.namelist():
-                        if name.endswith(".kml"):
-                            kml_string = kmz.read(name).decode("utf-8")
-                            break
-            elif uploaded_file.name.endswith(".kml"):
-                kml_string = uploaded_file.read().decode("utf-8")
-            elif uploaded_file.name.endswith(".geojson"):
-                geojson = json.load(uploaded_file)
-
-            if kml_string:
-                ns = {'kml': 'http://www.opengis.net/kml/2.2'}
-                root = ET.fromstring(kml_string)
-                for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
-                    coords = []
-                    raw_coords = coord_text.text.strip().split()
-                    for coord in raw_coords:
-                        parts = coord.split(',')
-                        if len(parts) >= 2:
-                            lon, lat = map(float, parts[:2])
-                            coords.append((lat, lon))
-                    if coords:
-                        polygons.append(coords)
-            elif geojson:
-                features = geojson["features"] if geojson["type"] == "FeatureCollection" else [geojson]
-                for feature in features:
-                    geom = feature["geometry"]
-                    if geom["type"] == "Polygon":
-                        coords = geom["coordinates"][0]
-                        polygons.append([(lat, lon) for lon, lat in coords])
-                    elif geom["type"] == "MultiPolygon":
-                        for part in geom["coordinates"]:
-                            coords = part[0]
-                            polygons.append([(lat, lon) for lon, lat in coords])
+            if input_mode == "Paste Coordinates":
+                text = st.session_state.get("coord_input", "")
+                float_tokens = re.findall(r"[-+]?\d*\.?\d+", text)
+                if len(float_tokens) >= 6:
+                    floats = list(map(float, float_tokens))
+                    coords = [(floats[i], floats[i+1]) for i in range(0, len(floats), 2)]
+                    polygons.append(coords)
+            else:
+                for uploaded_file in uploaded_files:
+                    file_type = uploaded_file.name.split('.')[-1].lower()
+                    if file_type == "geojson":
+                        geojson = json.load(uploaded_file)
+                        features = geojson["features"] if geojson["type"] == "FeatureCollection" else [geojson]
+                        for feature in features:
+                            geom = feature["geometry"]
+                            if geom["type"] == "Polygon":
+                                coords = geom["coordinates"][0]
+                                polygons.append([(lat, lon) for lon, lat in coords])
+                            elif geom["type"] == "MultiPolygon":
+                                for part in geom["coordinates"]:
+                                    coords = part[0]
+                                    polygons.append([(lat, lon) for lon, lat in coords])
+                    elif file_type == "kml":
+                        doc = uploaded_file.read().decode("utf-8")
+                        ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+                        root = ET.fromstring(doc)
+                        for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
+                            coords = []
+                            raw_coords = coord_text.text.strip().split()
+                            for coord in raw_coords:
+                                parts = coord.split(',')
+                                if len(parts) >= 2:
+                                    lon, lat = map(float, parts[:2])
+                                    coords.append((lat, lon))
+                            polygons.append(coords)
+                    elif file_type == "kmz":
+                        with zipfile.ZipFile(uploaded_file) as kmz:
+                            for name in kmz.namelist():
+                                if name.endswith(".kml"):
+                                    doc = kmz.read(name).decode("utf-8")
+                                    ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+                                    root = ET.fromstring(doc)
+                                    for coord_text in root.findall(".//kml:Polygon/kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", ns):
+                                        coords = []
+                                        raw_coords = coord_text.text.strip().split()
+                                        for coord in raw_coords:
+                                            parts = coord.split(',')
+                                            if len(parts) >= 2:
+                                                lon, lat = map(float, parts[:2])
+                                                coords.append((lat, lon))
+                                        polygons.append(coords)
 
             if polygons:
                 transform = transform_map.get((src_crs, tgt_crs))
                 if not transform:
                     st.warning("No transformation defined for selected CRS pair.")
                 else:
-                    converted_polygons = [
-                        [transform(lat, lon) for lat, lon in poly]
-                        for poly in polygons
-                    ]
+                    converted_polygons = [[transform(lat, lon) for lat, lon in poly] for poly in polygons]
 
                     m = folium.Map(tiles="CartoDB positron")
                     all_points = []
@@ -248,7 +265,6 @@ elif mode == "Polygon Conversion":
                         m.fit_bounds(bounds, padding=(5, 5))
 
                     m.get_root().html.add_child(Element(legend_html))
-                    st_folium(m, width=700, height=400)
 
                     kml = simplekml.Kml()
                     for i, poly in enumerate(converted_polygons):
@@ -274,6 +290,8 @@ elif mode == "Polygon Conversion":
                         st.download_button("Download KML", kml.kml().encode("utf-8"), file_name="converted_polygons.kml")
                     with d2:
                         st.download_button("Download GeoJSON", json.dumps(geojson_data).encode("utf-8"), file_name="converted_polygons.geojson")
+
+                    st_folium(m, width=700, height=400)
 
         except Exception as e:
             st.error(f"Error processing file: {e}")
